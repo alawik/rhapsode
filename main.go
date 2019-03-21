@@ -21,7 +21,7 @@ func main() {
 
     switch os.Args[1] {
     case "version":
-        fmt.Print(version)
+        fmt.Println(version)
         os.Exit(0)
     case "help":
         fmt.Print(usage)
