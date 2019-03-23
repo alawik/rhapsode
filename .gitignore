@@ -15,4 +15,4 @@ rhapsode
 *.out
 
 tests/
-functions/
+# functions/
