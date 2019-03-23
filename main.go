@@ -9,7 +9,7 @@ const version string = "0.0.0"
 
 const usage = `Usage:
     serve      starts the server
-    deploy     currently just finds runtime of function
+    deploy     builds and runs specified function in a Docker container
     version    show current version
     help       show this information
 `
