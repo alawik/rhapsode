@@ -18,11 +18,6 @@ app.get('/', (req, res) => {
 });
 
 app.post('/', (req, res) => {
-    //var input = req.body;
-    //var math = parseInt(input.a, 10) + parseInt(input.b, 10);
-    //var math = func(input);
-    //return res.send(func(req.body).toString());
-    //return res.end(func(req.body).toString());
     res.end(func(req.body).toString());
 });
 
