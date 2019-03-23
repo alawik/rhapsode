@@ -1,0 +1,14 @@
+{
+  "name": "node_func",
+  "version": "0.0.1",
+  "description": "",
+  "main": "func.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "author": "Killian Alawi <alawik@kapela.io>",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.16.4"
+  }
+}
