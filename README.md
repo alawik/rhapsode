@@ -4,6 +4,13 @@ Rhapsode is a distributed function-as-a-service platform that utilizes blockchai
 
 ## Features
 
+```
+Usage:
+    serve      starts the server
+    version    show current version
+    help       show this information
+```
+
 ## Installation
 
 ## Dependencies
