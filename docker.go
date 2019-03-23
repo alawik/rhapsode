@@ -6,15 +6,28 @@ import (
     "os/exec"
 )
 
+func isDockerInstalled() bool {
+    if _, err := os.Stat("/usr/local/bin/docker"); os.IsNotExist(err) {
+        return false
+    } else {
+        return true
+    }
+}
+
 func DockerBuild(fxPath string, imageTag string) {
-    cmd := "docker"
-    args := []string{"build", "-t", imageTag, fxPath}
-    if err := exec.Command(cmd, args...).Run(); err != nil {
-        fmt.Fprintln(os.Stderr, err)
+    if isDockerInstalled() {
+        cmd := "docker"
+        args := []string{"build", "-t", imageTag, fxPath}
+        if err := exec.Command(cmd, args...).Run(); err != nil {
+            fmt.Fprintln(os.Stderr, err)
+            os.Exit(1)
+        }
+
+        fmt.Printf("Docker image of function built.\n")
+    } else {
+        fmt.Print("Docker not installed.")
         os.Exit(1)
     }
-
-    fmt.Printf("Docker image of function built.\n")
 }
 
 func DockerRun(imageTag string) {
