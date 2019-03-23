@@ -20,9 +20,14 @@ func Deploy() {
         fxPathExists, _ := DoesPathExist(fxPath)
 
         if fxPathExists {
-            fxLang := LangOfFunc(fxPath)
-            fmt.Printf("Function written in %s", fxLang)
-            os.Exit(1)
+            //fxLang := LangOfFunc(fxPath)
+
+            var imageTag = "rtest/node_func:v2"
+            DockerBuild(fxPath, imageTag)
+            DockerRun(imageTag)
+
+            fmt.Printf("Deployment complete.\n")
+            os.Exit(0)
         } else {
             fmt.Print("Function path does not exist.")
             os.Exit(1)
