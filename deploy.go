@@ -6,11 +6,6 @@ import (
 )
 
 func Deploy() {
-    // check what lang the function is
-    // move or copy function to /functions/ directory
-    // call the Build() function to create the function's Docker image
-    // run the built Docker image
-
     nArgs := len(os.Args)
     if nArgs == 2 {
         fmt.Print("Use the help command for usage.")
