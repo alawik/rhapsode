@@ -9,6 +9,7 @@ const version string = "0.0.0"
 
 const usage = `Usage:
     serve      starts the server
+    deploy     currently just finds runtime of function
     version    show current version
     help       show this information
 `
@@ -28,6 +29,8 @@ func main() {
         os.Exit(0)
     case "serve":
         Serve()
+    case "deploy":
+        Deploy()
     default:
         fmt.Print(usage)
         os.Exit(1)
