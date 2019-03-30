@@ -5,6 +5,8 @@ import (
     "path/filepath"
     "bytes"
 	"math/big"
+    "encoding/binary"
+    "log"
 )
 
 func DoesPathExist(path string) (bool, error) {
@@ -36,6 +38,22 @@ func LangOfFunc(fileName string) (lang string) {
         //do something here
     }
     */
+}
+
+func IntToHex(num int64) []byte {
+	buff := new(bytes.Buffer)
+	err := binary.Write(buff, binary.BigEndian, num)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	return buff.Bytes()
+}
+
+func ReverseBytes(data []byte) {
+	for i, j := 0, len(data)-1; i < j; i, j = i+1, j-1 {
+		data[i], data[j] = data[j], data[i]
+	}
 }
 
 var b58Alphabet = []byte("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
