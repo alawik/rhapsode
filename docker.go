@@ -4,6 +4,7 @@ import (
     "fmt"
     "os"
     "os/exec"
+    "strings"
 )
 
 func isDockerInstalled() bool {
@@ -19,7 +20,7 @@ func DockerBuild(fxPath string, imageTag string) {
         cmd := "docker"
         args := []string{"build", "-t", imageTag, fxPath}
         if err := exec.Command(cmd, args...).Run(); err != nil {
-            fmt.Fprintln(os.Stderr, err)
+            fmt.Fprintln(os.Stderr, err, "\nMake sure Docker is running.")
             os.Exit(1)
         }
 
@@ -30,13 +31,15 @@ func DockerBuild(fxPath string, imageTag string) {
     }
 }
 
-func DockerRun(imageTag string) {
+func DockerRun(imageTag string, port string) {
     cmd := "docker"
-    args := []string{"run", "-p", "8080:8080", "-d", imageTag}
+    p := []string{port, ":8080"}
+    ports := strings.Join(p, "")
+    args := []string{"run", "-p", ports, "-d", imageTag}
     if err := exec.Command(cmd, args...).Run(); err != nil {
-        fmt.Fprintln(os.Stderr, err)
+        fmt.Fprintln(os.Stderr, err, "\nMake sure Docker is running.")
         os.Exit(1)
     }
 
-    fmt.Printf("Function running on port 8080.\n")
+    fmt.Printf("Function running on port %s.\n", port)
 }
