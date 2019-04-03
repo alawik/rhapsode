@@ -13,7 +13,7 @@ Work In Progress (WIP)
 Usage:
     createwallet        generates new key-pair and saves it into the wallet file
     listaddresses       lists all addresses from the wallet file
-    createblockchain    Create a blockchain and initiate genesis block 
+    createblockchain    Create a blockchain and initiate genesis block
     getbalance          get balance of an address
     printchain          prints all the blocks of the blockchain in terminal
     reindexutxo         rebuilds the UTXO set
@@ -45,6 +45,8 @@ Currently there is no handler to send the deployment request to the server, but 
 Docker should be installed on your machine.
 
 [github.com/gorilla/mux](https://github.com/gorilla/mux)
+[github.com/boltdb/bolt](https://github.com/boltdb/bolt)
+[golang.org/x/crypto/ripemd160](https://golang.org/x/crypto/ripemd160)
 
 ## License
 
