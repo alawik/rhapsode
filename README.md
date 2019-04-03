@@ -44,8 +44,8 @@ Currently there is no handler to send the deployment request to the server, but 
 
 Docker should be installed on your machine.
 
-[github.com/gorilla/mux](https://github.com/gorilla/mux)
-[github.com/boltdb/bolt](https://github.com/boltdb/bolt)
+[github.com/gorilla/mux](https://github.com/gorilla/mux) <br>
+[github.com/boltdb/bolt](https://github.com/boltdb/bolt) <br>
 [golang.org/x/crypto/ripemd160](https://golang.org/x/crypto/ripemd160)
 
 ## License
