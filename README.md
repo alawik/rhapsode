@@ -11,10 +11,17 @@ Work In Progress (WIP)
 
 ```
 Usage:
-    serve      starts the server
-    deploy     builds and runs specified function in a Docker container
-    version    show current version
-    help       show this information
+    createwallet        generates new key-pair and saves it into the wallet file
+    listaddresses       lists all addresses from the wallet file
+    createblockchain    Create a blockchain and initiate genesis block 
+    getbalance          get balance of an address
+    printchain          prints all the blocks of the blockchain in terminal
+    reindexutxo         rebuilds the UTXO set
+    send                send coins from one address to another
+    serve               starts the server
+    deploy              builds and runs specified function in a Docker container
+    version             show current version
+    help                show this information
 ```
 
 ## Installation
