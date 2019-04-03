@@ -27,13 +27,15 @@ Usage:
 
 ### Usage
 
-`./rhapsode deploy ./functions/node/.`
+`./rhapsode deploy <function path> <port>`
+
+`./rhapsode deploy ./functions/node/. 8080`
 
 Currently there is no handler to send the deployment request to the server, but the function will still be deployed. Use the Docker CLI to stop and remove the running container.
 
 ## Dependencies
 
-Docker should be installed on your machine. 
+Docker should be installed on your machine.
 
 [github.com/gorilla/mux](https://github.com/gorilla/mux)
 
