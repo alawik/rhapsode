@@ -16,3 +16,6 @@ rhapsode
 
 tests/
 # functions/
+
+*.db
+wallet.dat
