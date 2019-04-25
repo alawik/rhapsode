@@ -19,3 +19,5 @@ tests/
 
 *.db
 wallet.dat
+
+.idea

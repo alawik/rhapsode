@@ -13,13 +13,12 @@ func Deploy() {
     } else if nArgs >= 3 {
         fxPath := os.Args[2]
         fxPathExists, _ := DoesPathExist(fxPath)
-        imageTag := os.Args[3]
-        port := os.Args[4]
+        port := os.Args[3]
 
-        if fxPathExists && imageTag != "" && port != "" {
+        if fxPathExists && port != "" {
             //fxLang := LangOfFunc(fxPath)
 
-            DockerBuild(fxPath, imageTag)
+            imageTag:=DockerBuild(fxPath)
             DockerRun(imageTag, port)
 
             fmt.Print("Deployment complete.\n")
