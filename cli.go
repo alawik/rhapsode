@@ -23,6 +23,11 @@ func (cli *CLI) printUsage() {
 	fmt.Println("  send -from FROM -to TO -amount AMOUNT - Send AMOUNT of coins from FROM address to TO")
 	fmt.Println("  deploy <fxPath> <port> - Builds and runs specified function in a Docker container")
 	fmt.Println("  serve - Starts the server")
+
+	fmt.Println("  fbuild - Build function to image")
+	fmt.Println("  functionrun - Run function by image tag")
+	fmt.Println("  imagelist - Get list of functions")
+
 	fmt.Println("  version - Shows the current software version")
 	fmt.Println("  help - Show this usage information")
 }
@@ -91,6 +96,14 @@ func (cli *CLI) Run() {
 		Serve()
 	case "deploy":
 		Deploy()
+	case "imagebuild":
+		DockerBuild(os.Args[0])
+	case "imagerun":
+		DockerRun(os.Args[0], os.Args[1])
+	case "imageremove":
+		DockerDeleteImage(os.Args[0])
+	case "imagelist":
+		DockerImageList()
 	case "version":
 		fmt.Println(version)
 		os.Exit(0)

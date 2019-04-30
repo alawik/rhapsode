@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/boltdb/bolt"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
@@ -16,6 +17,107 @@ import (
 	"strings"
 )
 import "github.com/mholt/archiver"
+
+const dbDockerFile = "docker.db"
+const imagesBucket = "images"
+
+type DockerDB struct {
+	db *bolt.DB
+}
+type DockerImage struct {
+	Tag   string
+	Value string
+}
+
+func getDockerDB() DockerDB {
+	dockerDB := DockerDB{}
+	dockerDB.Open()
+	return dockerDB
+}
+func (ddb *DockerDB) Open() {
+	db, err := bolt.Open(dbDockerFile, 0600, nil)
+	if err != nil {
+		log.Panic(err)
+	}
+	ddb.db = db
+	err = db.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists([]byte(imagesBucket))
+		if err != nil {
+			return fmt.Errorf("create bucket: %s", err)
+		}
+		return nil
+	})
+	if err != nil {
+		log.Panic(err)
+	}
+}
+func (ddb *DockerDB) GetImage(tag string) (DockerImage, error) {
+	var value []byte
+	err := ddb.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(imagesBucket))
+		value = b.Get([]byte(tag))
+		return nil
+	})
+	if err != nil {
+		log.Panic(err)
+		return DockerImage{}, err
+	}
+	return DockerImage{
+		tag,
+		string(value),
+	}, nil
+}
+func (ddb *DockerDB) AddImage(tag string, value string) (bool, error) {
+	_, err := ddb.GetImage(tag)
+	if err == nil {
+		return true, nil
+	}
+	err = ddb.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(imagesBucket))
+		err := b.Put([]byte(tag), []byte(value))
+		return err
+	})
+	if err != nil {
+		log.Panic(err)
+		return false, err
+	}
+	return true, nil
+}
+func (ddb *DockerDB) DeleteImage(tag string) (bool, error) {
+	err := ddb.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(imagesBucket))
+		err := b.Delete([]byte(tag))
+		return err
+	})
+	if err != nil {
+		log.Panic(err)
+		return false, err
+	}
+	return true, nil
+}
+func (ddb *DockerDB) GetImageList() ([]DockerImage, error) {
+	var list []DockerImage
+	err := ddb.db.View(func(tx *bolt.Tx) error {
+		// Assume bucket exists and has keys
+		b := tx.Bucket([]byte(imagesBucket))
+		err := b.ForEach(func(k, v []byte) error {
+			list = append(list, DockerImage{
+				string(k),
+				string(k),
+			})
+			return nil
+		})
+		if err != nil {
+			log.Panic(err)
+		}
+		return nil
+	})
+	if err != nil {
+		log.Panic(err)
+		return []DockerImage{}, err
+	}
+	return list, nil
+}
 
 func isDockerInstalled() bool {
 	if _, err := os.Stat("/usr/local/bin/docker"); os.IsNotExist(err) {
@@ -142,20 +244,28 @@ func DockerBuild(fxPath string) string {
 		os.Exit(1)
 	}
 	log.Println("imageTag", imageTag)
+	db := getDockerDB()
+	_, err := db.AddImage(imageTag, imageTag)
+	if err != nil {
+		log.Panic("ERROR ADD IMAGE TO DB", err)
+	}
 	return imageTag
 }
-
 func DockerRun(imageTag string, port string) {
-
+	db := getDockerDB()
+	image, err := db.GetImage(imageTag)
+	if err != nil {
+		log.Panic("ERROR GET IMAGE FROM DB", err)
+	}
 	ctx := context.Background()
 	cli := getDockerClient()
 	//portSet:=nat.PortSet{"8080": struct{}{}}
 	resp, err := cli.ContainerCreate(ctx, &container.Config{
-		Image: imageTag,
+		Image: image.Tag,
 		//ExposedPorts: portSet,
 	}, &container.HostConfig{
 		//PortBindings: map[nat.Port][]nat.PortBinding{nat.Port(port): {{HostIP: "127.0.0.1", HostPort: port}}},
-	}, nil, imageTag)
+	}, nil, image.Tag)
 	if err != nil {
 		panic(err)
 	}
@@ -215,4 +325,24 @@ func DockerRun(imageTag string, port string) {
 	//}
 	//
 	log.Printf("Function running on port %s.\n", port)
+}
+func DockerImageList() {
+	db := getDockerDB()
+	list, err := db.GetImageList()
+	if err != nil {
+		log.Panic("ERROR GET IMAGE LIST FROM DB", err)
+	}
+	println("IMAGE LIST:")
+	for i := range list {
+		println(fmt.Sprintf("%v. %v - %v", i, list[i].Tag, list[i].Value))
+	}
+}
+func DockerDeleteImage(tag string) {
+	db := getDockerDB()
+	_, err := db.DeleteImage(tag)
+	if err != nil {
+		log.Panic("ERROR DELETE IMAGE FROM DB", err)
+		return
+	}
+	println(fmt.Sprintf("IMAGE %v WAS DELETED", tag))
 }
