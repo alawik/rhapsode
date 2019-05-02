@@ -22,23 +22,29 @@ const dbDockerFile = "docker.db"
 const imagesBucket = "images"
 
 type DockerDB struct {
-	db *bolt.DB
+	db     *bolt.DB
+	isOpen bool
 }
 type DockerImage struct {
-	Tag   string
+	Id    string
 	Value string
 }
 
+var DockerDBInstance DockerDB
+
 func getDockerDB() DockerDB {
-	dockerDB := DockerDB{}
-	dockerDB.Open()
-	return dockerDB
+	DockerDBInstance.Open()
+	return DockerDBInstance
 }
 func (ddb *DockerDB) Open() {
+	if ddb.isOpen {
+		return
+	}
 	db, err := bolt.Open(dbDockerFile, 0600, nil)
 	if err != nil {
 		log.Panic(err)
 	}
+	ddb.isOpen = true
 	ddb.db = db
 	err = db.Update(func(tx *bolt.Tx) error {
 		_, err := tx.CreateBucketIfNotExists([]byte(imagesBucket))
@@ -51,11 +57,11 @@ func (ddb *DockerDB) Open() {
 		log.Panic(err)
 	}
 }
-func (ddb *DockerDB) GetImage(tag string) (DockerImage, error) {
+func (ddb *DockerDB) GetFunction(functionID string) (DockerImage, error) {
 	var value []byte
 	err := ddb.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(imagesBucket))
-		value = b.Get([]byte(tag))
+		value = b.Get([]byte(functionID))
 		return nil
 	})
 	if err != nil {
@@ -63,30 +69,14 @@ func (ddb *DockerDB) GetImage(tag string) (DockerImage, error) {
 		return DockerImage{}, err
 	}
 	return DockerImage{
-		tag,
+		functionID,
 		string(value),
 	}, nil
 }
-func (ddb *DockerDB) AddImage(tag string, value string) (bool, error) {
-	_, err := ddb.GetImage(tag)
-	if err == nil {
-		return true, nil
-	}
-	err = ddb.db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(imagesBucket))
-		err := b.Put([]byte(tag), []byte(value))
-		return err
-	})
-	if err != nil {
-		log.Panic(err)
-		return false, err
-	}
-	return true, nil
-}
-func (ddb *DockerDB) DeleteImage(tag string) (bool, error) {
+func (ddb *DockerDB) AddFunction(functionID string, value string) (bool, error) {
 	err := ddb.db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(imagesBucket))
-		err := b.Delete([]byte(tag))
+		err := b.Put([]byte(functionID), []byte(value))
 		return err
 	})
 	if err != nil {
@@ -95,7 +85,19 @@ func (ddb *DockerDB) DeleteImage(tag string) (bool, error) {
 	}
 	return true, nil
 }
-func (ddb *DockerDB) GetImageList() ([]DockerImage, error) {
+func (ddb *DockerDB) DeleteFunction(functionID string) (bool, error) {
+	err := ddb.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(imagesBucket))
+		err := b.Delete([]byte(functionID))
+		return err
+	})
+	if err != nil {
+		log.Panic(err)
+		return false, err
+	}
+	return true, nil
+}
+func (ddb *DockerDB) GetFunctionList() ([]DockerImage, error) {
 	var list []DockerImage
 	err := ddb.db.View(func(tx *bolt.Tx) error {
 		// Assume bucket exists and has keys
@@ -103,7 +105,7 @@ func (ddb *DockerDB) GetImageList() ([]DockerImage, error) {
 		err := b.ForEach(func(k, v []byte) error {
 			list = append(list, DockerImage{
 				string(k),
-				string(k),
+				string(v),
 			})
 			return nil
 		})
@@ -177,7 +179,12 @@ func writeToLog(reader io.ReadCloser) error {
 	return nil
 }
 func DockerBuild(fxPath string) string {
-	imageTag := GenerateFunctionId()
+	fxPathExists, _ := DoesPathExist(fxPath)
+	if !fxPathExists {
+		fmt.Print("Function path does not exist.")
+		os.Exit(1)
+	}
+	functionID := GenerateFunctionId()
 	if isDockerInstalled() {
 		ctx := context.Background()
 		cli := getDockerClient()
@@ -222,7 +229,7 @@ func DockerBuild(fxPath string) string {
 			types.ImageBuildOptions{
 				NoCache:    true,
 				Remove:     true,
-				Tags:       []string{imageTag},
+				Tags:       []string{functionID},
 				Dockerfile: dockerFile,
 				//BuildArgs:  buildArgs,
 			})
@@ -233,6 +240,18 @@ func DockerBuild(fxPath string) string {
 		defer func() {
 			imageBuildResponse.Body.Close()
 			removeIfExists(tarPath)
+			log.Println(fmt.Sprintf("Create container from image %v", functionID))
+			resp, err := cli.ContainerCreate(ctx, &container.Config{Image: functionID}, &container.HostConfig{}, nil, functionID)
+			if err != nil {
+				panic(err)
+			}
+			log.Println(fmt.Sprintf("Container ID = %v", resp.ID))
+			db := getDockerDB()
+			_, err = db.AddFunction(functionID, resp.ID)
+			log.Println(fmt.Sprintf("Function %v added to DB with contaienr ID = %v", functionID, resp.ID))
+			if err != nil {
+				log.Panic("ERROR ADD FUNCTION TO DB", err)
+			}
 		}()
 		//_, err = io.Copy(os.Stdout, imageBuildResponse.Body)
 		//if err != nil {
@@ -243,106 +262,103 @@ func DockerBuild(fxPath string) string {
 		fmt.Print("Docker not installed.")
 		os.Exit(1)
 	}
-	log.Println("imageTag", imageTag)
-	db := getDockerDB()
-	_, err := db.AddImage(imageTag, imageTag)
-	if err != nil {
-		log.Panic("ERROR ADD IMAGE TO DB", err)
-	}
-	return imageTag
+	log.Println("functionID", functionID)
+
+	return functionID
 }
-func DockerRun(imageTag string, port string) {
+func DockerRun(functionID string, port string) {
 	db := getDockerDB()
-	image, err := db.GetImage(imageTag)
+	function, err := db.GetFunction(functionID)
 	if err != nil {
-		log.Panic("ERROR GET IMAGE FROM DB", err)
+		log.Panic("ERROR GET FUNCTION FROM DB", err)
+		os.Exit(1)
 	}
+
 	ctx := context.Background()
 	cli := getDockerClient()
 	//portSet:=nat.PortSet{"8080": struct{}{}}
-	resp, err := cli.ContainerCreate(ctx, &container.Config{
-		Image: image.Tag,
-		//ExposedPorts: portSet,
-	}, &container.HostConfig{
-		//PortBindings: map[nat.Port][]nat.PortBinding{nat.Port(port): {{HostIP: "127.0.0.1", HostPort: port}}},
-	}, nil, image.Tag)
-	if err != nil {
+
+	_ = cli.ContainerStop(ctx, function.Value, nil)
+	log.Println(fmt.Sprintf("Runing function %v (docker container %v)", function.Id, function.Value))
+	if err := cli.ContainerStart(ctx, function.Value, types.ContainerStartOptions{}); err != nil {
 		panic(err)
 	}
 
-	if err := cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
-		panic(err)
-	}
-
-	//ctx := context.Background()
-	//cli, err := client.NewEnvClient()
-	//if err != nil {
-	//	panic(err)
-	//}
-	//
-	////reader, err := cli.ImagePull(ctx, "docker.io/library/alpine", types.ImagePullOptions{})
-	////if err != nil {
-	////    panic(err)
-	////}
-	////io.Copy(os.Stdout, reader)
-	////
-	////resp, err := cli.ContainerCreate(ctx, &container.Config{
-	////    Image: "alpine",
-	////    Cmd:   []string{"echo", "hello world"},
-	////    Tty:   true,
-	////}, nil, nil, "")
-	////if err != nil {
-	////    panic(err)
-	////}
-	//
-	//if err := cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
-	//	panic(err)
-	//}
-	//
-	//statusCh, errCh := cli.ContainerWait(ctx, resp.ID, container.WaitConditionNotRunning)
-	//select {
-	//case err := <-errCh:
-	//	if err != nil {
-	//		panic(err)
-	//	}
-	//case <-statusCh:
-	//}
-	//
-	//out, err := cli.ContainerLogs(ctx, resp.ID, types.ContainerLogsOptions{ShowStdout: true})
-	//if err != nil {
-	//	panic(err)
-	//}
-	//
-	//io.Copy(os.Stdout, out)
-	//
-	//cmd := "docker"
-	//p := []string{port, ":8080"}
-	//ports := strings.Join(p, "")
-	//args := []string{"run", "-p", ports, "-d", imageTag}
-	//if err := exec.Command(cmd, args...).Run(); err != nil {
-	//	fmt.Fprintln(os.Stderr, err, "\nMake sure Docker is running.")
-	//	os.Exit(1)
-	//}
-	//
 	log.Printf("Function running on port %s.\n", port)
 }
-func DockerImageList() {
-	db := getDockerDB()
-	list, err := db.GetImageList()
+func DockerStop(containerId string) {
+	ctx := context.Background()
+	cli := getDockerClient()
+	//portSet:=nat.PortSet{"8080": struct{}{}}
+	err := cli.ContainerStop(ctx, containerId, nil)
 	if err != nil {
-		log.Panic("ERROR GET IMAGE LIST FROM DB", err)
+		panic(err)
 	}
-	println("IMAGE LIST:")
+
+	log.Printf("Function with ID %v has been stopped", containerId)
+}
+func DockerRemoveContainer(containerId string) {
+	ctx := context.Background()
+	cli := getDockerClient()
+	err := cli.ContainerRemove(ctx, containerId, types.ContainerRemoveOptions{})
+	if err != nil {
+		panic(err)
+	}
+	log.Printf("Container with ID %v has been removed", containerId)
+}
+func DockerRemoveImage(functionID string) {
+	ctx := context.Background()
+	cli := getDockerClient()
+	image, _, err := cli.ImageInspectWithRaw(ctx, functionID)
+	if err != nil {
+		panic(err)
+	}
+	if image.ID != "" {
+		_, err = cli.ImageRemove(ctx, image.ID, types.ImageRemoveOptions{})
+	}
+	if err != nil {
+		panic(err)
+	}
+	log.Printf("Image with ID %v has been remmoved", functionID)
+}
+func DockerFunctionList() {
+	db := getDockerDB()
+	list, err := db.GetFunctionList()
+	if err != nil {
+		log.Panic("ERROR GET FUNCTION LIST FROM DB", err)
+	}
+	if len(list) == 0 {
+		println("Function list is empty")
+		os.Exit(0)
+	}
+	println(fmt.Sprintf("Functions (%v):", len(list)))
 	for i := range list {
-		println(fmt.Sprintf("%v. %v - %v", i, list[i].Tag, list[i].Value))
+		println(fmt.Sprintf("%v. %v - %v", i, list[i].Id, list[i].Value))
 	}
 }
-func DockerDeleteImage(tag string) {
+func DockerDeleteFunction(functionID string) {
 	db := getDockerDB()
-	_, err := db.DeleteImage(tag)
+	function, err := db.GetFunction(functionID)
 	if err != nil {
-		log.Panic("ERROR DELETE IMAGE FROM DB", err)
+		log.Println("ERROR GET FUNCTION FROM DB", err)
+		os.Exit(1)
+	}
+	if function.Id == "" {
+		log.Println(fmt.Sprintf("Function %v not found", functionID))
+		os.Exit(1)
+	}
+	if function.Value == "" {
+		log.Println(fmt.Sprintf("Container not found"))
+		os.Exit(1)
+	}
+
+	DockerStop(function.Value)
+	DockerRemoveContainer(function.Value)
+	DockerRemoveImage(function.Id)
+	_, err = db.DeleteFunction(functionID)
+	if err != nil {
+		log.Panic("ERROR DELETE FUNCTION FROM DB", err)
 		return
 	}
-	println(fmt.Sprintf("IMAGE %v WAS DELETED", tag))
+	log.Printf("Function %v has been deleted", functionID)
 }

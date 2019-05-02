@@ -18,8 +18,8 @@ func Deploy() {
         if fxPathExists && port != "" {
             //fxLang := LangOfFunc(fxPath)
 
-            imageTag:=DockerBuild(fxPath)
-            DockerRun(imageTag, port)
+            //imageTag:=DockerBuild(fxPath)
+            //DockerRun(imageTag, port)
 
             fmt.Print("Deployment complete.\n")
             os.Exit(0)
