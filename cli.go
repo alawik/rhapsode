@@ -106,11 +106,11 @@ func (cli *CLI) Run() {
 		checkArgumentsNumber(3)
 		DockerBuild(os.Args[2])
 	case "frun":
-		checkArgumentsNumber(4)
-		DockerRun(os.Args[2], os.Args[3])
+		checkArgumentsNumber(3)
+		DockerRun(os.Args[2])
 	case "fstop":
 		checkArgumentsNumber(3)
-		DockerStop(os.Args[2])
+		DockerStopFunction(os.Args[2])
 	case "fdelete":
 		checkArgumentsNumber(3)
 		DockerDeleteFunction(os.Args[2])

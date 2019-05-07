@@ -5,11 +5,13 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/boltdb/bolt"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
+	"github.com/phayes/freeport"
 	"io"
 	"io/ioutil"
 	"log"
@@ -18,16 +20,19 @@ import (
 )
 import "github.com/mholt/archiver"
 
-const dbDockerFile = "docker.db"
-const imagesBucket = "images"
+const dbDockerFile = "functions.db"
+const functionsBucket = "functions"
 
 type DockerDB struct {
 	db     *bolt.DB
 	isOpen bool
 }
-type DockerImage struct {
-	Id    string
-	Value string
+type DockerFunction struct {
+	Id          string `json:"id"`
+	ContainerId string `json:"containerId"`
+	IsRunning   bool   `json:"isRunning"`
+	Port        int    `json:"port"`
+	IP          string `json:"ip"`
 }
 
 var DockerDBInstance DockerDB
@@ -47,7 +52,7 @@ func (ddb *DockerDB) Open() {
 	ddb.isOpen = true
 	ddb.db = db
 	err = db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists([]byte(imagesBucket))
+		_, err := tx.CreateBucketIfNotExists([]byte(functionsBucket))
 		if err != nil {
 			return fmt.Errorf("create bucket: %s", err)
 		}
@@ -57,26 +62,55 @@ func (ddb *DockerDB) Open() {
 		log.Panic(err)
 	}
 }
-func (ddb *DockerDB) GetFunction(functionID string) (DockerImage, error) {
+func (ddb *DockerDB) GetFunction(functionID string) (DockerFunction, error) {
 	var value []byte
+	var dockerFunction DockerFunction
 	err := ddb.db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(imagesBucket))
+		b := tx.Bucket([]byte(functionsBucket))
 		value = b.Get([]byte(functionID))
+
+		jsonErr := json.Unmarshal(value, &dockerFunction)
+		if jsonErr != nil {
+			log.Panic("Parse function JSON error", jsonErr)
+		}
 		return nil
 	})
 	if err != nil {
 		log.Panic(err)
-		return DockerImage{}, err
+		return dockerFunction, err
 	}
-	return DockerImage{
-		functionID,
-		string(value),
-	}, nil
+	return dockerFunction, nil
 }
-func (ddb *DockerDB) AddFunction(functionID string, value string) (bool, error) {
+func (ddb *DockerDB) AddFunction(functionID string, containerID string) (bool, error) {
 	err := ddb.db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(imagesBucket))
-		err := b.Put([]byte(functionID), []byte(value))
+		b := tx.Bucket([]byte(functionsBucket))
+		jsonBytes, jsonErr := json.Marshal(DockerFunction{
+			Id:          functionID,
+			ContainerId: containerID,
+			IsRunning:   false,
+			Port:        0,
+			IP:          "",
+		})
+		if jsonErr != nil {
+			log.Panic("Stringify function JSON error", jsonErr)
+		}
+		err := b.Put([]byte(functionID), jsonBytes)
+		return err
+	})
+	if err != nil {
+		log.Panic(err)
+		return false, err
+	}
+	return true, nil
+}
+func (ddb *DockerDB) UpdateFunction(dockerFunction DockerFunction) (bool, error) {
+	err := ddb.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(functionsBucket))
+		jsonBytes, jsonErr := json.Marshal(dockerFunction)
+		if jsonErr != nil {
+			log.Panic("Stringify function JSON error", jsonErr)
+		}
+		err := b.Put([]byte(dockerFunction.Id), jsonBytes)
 		return err
 	})
 	if err != nil {
@@ -87,7 +121,7 @@ func (ddb *DockerDB) AddFunction(functionID string, value string) (bool, error) 
 }
 func (ddb *DockerDB) DeleteFunction(functionID string) (bool, error) {
 	err := ddb.db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(imagesBucket))
+		b := tx.Bucket([]byte(functionsBucket))
 		err := b.Delete([]byte(functionID))
 		return err
 	})
@@ -97,16 +131,18 @@ func (ddb *DockerDB) DeleteFunction(functionID string) (bool, error) {
 	}
 	return true, nil
 }
-func (ddb *DockerDB) GetFunctionList() ([]DockerImage, error) {
-	var list []DockerImage
+func (ddb *DockerDB) GetFunctionList() ([]DockerFunction, error) {
+	var list []DockerFunction
 	err := ddb.db.View(func(tx *bolt.Tx) error {
 		// Assume bucket exists and has keys
-		b := tx.Bucket([]byte(imagesBucket))
+		b := tx.Bucket([]byte(functionsBucket))
 		err := b.ForEach(func(k, v []byte) error {
-			list = append(list, DockerImage{
-				string(k),
-				string(v),
-			})
+			dockerFunction := DockerFunction{}
+			jsonErr := json.Unmarshal(v, &dockerFunction)
+			if jsonErr != nil {
+				log.Panic("Parse function JSON error", jsonErr)
+			}
+			list = append(list, dockerFunction)
 			return nil
 		})
 		if err != nil {
@@ -116,7 +152,7 @@ func (ddb *DockerDB) GetFunctionList() ([]DockerImage, error) {
 	})
 	if err != nil {
 		log.Panic(err)
-		return []DockerImage{}, err
+		return []DockerFunction{}, err
 	}
 	return list, nil
 }
@@ -266,7 +302,12 @@ func DockerBuild(fxPath string) string {
 
 	return functionID
 }
-func DockerRun(functionID string, port string) {
+func DockerRun(functionID string) {
+	port, err := freeport.GetFreePort()
+	if err != nil {
+		log.Panic("Can't find free port", err)
+	}
+
 	db := getDockerDB()
 	function, err := db.GetFunction(functionID)
 	if err != nil {
@@ -278,18 +319,25 @@ func DockerRun(functionID string, port string) {
 	cli := getDockerClient()
 	//portSet:=nat.PortSet{"8080": struct{}{}}
 
-	_ = cli.ContainerStop(ctx, function.Value, nil)
-	log.Println(fmt.Sprintf("Runing function %v (docker container %v)", function.Id, function.Value))
-	if err := cli.ContainerStart(ctx, function.Value, types.ContainerStartOptions{}); err != nil {
+	_ = cli.ContainerStop(ctx, function.ContainerId, nil)
+	log.Println(fmt.Sprintf("Runing function %v (docker container %v)", function.Id, function.ContainerId))
+	if err := cli.ContainerStart(ctx, function.ContainerId, types.ContainerStartOptions{}); err != nil {
 		panic(err)
 	}
+	function.Port = port
+	function.IsRunning = true
+	function.IP = string("127.0.0.1")
+	ok, err := db.UpdateFunction(function)
+	if !ok || err != nil {
+		log.Panic("Err DB update function", err)
+	}
 
-	log.Printf("Function running on port %s.\n", port)
+	log.Printf("Function running on port %v.\n", port)
 }
+
 func DockerStop(containerId string) {
 	ctx := context.Background()
 	cli := getDockerClient()
-	//portSet:=nat.PortSet{"8080": struct{}{}}
 	err := cli.ContainerStop(ctx, containerId, nil)
 	if err != nil {
 		panic(err)
@@ -332,8 +380,19 @@ func DockerFunctionList() {
 		os.Exit(0)
 	}
 	println(fmt.Sprintf("Functions (%v):", len(list)))
+	println(fmt.Sprintf("   ID                     Container ID"))
 	for i := range list {
-		println(fmt.Sprintf("%v. %v - %v", i, list[i].Id, list[i].Value))
+		status := ""
+		if list[i].IsRunning {
+			status = "running"
+		} else {
+			status = "not running"
+		}
+		ipString := ""
+		if list[i].IP != "" && list[i].Port > 0 {
+			ipString = fmt.Sprintf(" (%v:%v)", list[i].IP, list[i].Port)
+		}
+		println(fmt.Sprintf("%v. %v - %v%v %v", i, list[i].Id, list[i].ContainerId, ipString, status))
 	}
 }
 func DockerDeleteFunction(functionID string) {
@@ -347,13 +406,13 @@ func DockerDeleteFunction(functionID string) {
 		log.Println(fmt.Sprintf("Function %v not found", functionID))
 		os.Exit(1)
 	}
-	if function.Value == "" {
+	if function.ContainerId == "" {
 		log.Println(fmt.Sprintf("Container not found"))
 		os.Exit(1)
 	}
 
-	DockerStop(function.Value)
-	DockerRemoveContainer(function.Value)
+	DockerStop(function.ContainerId)
+	DockerRemoveContainer(function.ContainerId)
 	DockerRemoveImage(function.Id)
 	_, err = db.DeleteFunction(functionID)
 	if err != nil {
@@ -361,4 +420,29 @@ func DockerDeleteFunction(functionID string) {
 		return
 	}
 	log.Printf("Function %v has been deleted", functionID)
+}
+func DockerStopFunction(functionID string) {
+	db := getDockerDB()
+	function, err := db.GetFunction(functionID)
+	if err != nil {
+		log.Println("Error get function from db", err)
+		os.Exit(1)
+	}
+	if function.Id == "" {
+		log.Println(fmt.Sprintf("Function %v not found", functionID))
+		os.Exit(1)
+	}
+	if function.ContainerId == "" {
+		log.Println(fmt.Sprintf("Container not found"))
+		os.Exit(1)
+	}
+
+	DockerStop(function.ContainerId)
+	function.IsRunning = false
+	function.Port = 0
+	function.IP = ""
+	ok, err := db.UpdateFunction(function)
+	if !ok || err != nil {
+		log.Panic("Err DB update function", err)
+	}
 }
