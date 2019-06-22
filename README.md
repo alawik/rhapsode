@@ -11,17 +11,27 @@ Work In Progress (WIP)
 
 ```
 Usage:
-    createwallet        generates new key-pair and saves it into the wallet file
-    listaddresses       lists all addresses from the wallet file
-    createblockchain    Create a blockchain and initiate genesis block
-    getbalance          get balance of an address
-    printchain          prints all the blocks of the blockchain in terminal
-    reindexutxo         rebuilds the UTXO set
-    send                send coins from one address to another
-    serve               starts the server
-    deploy              builds and runs specified function in a Docker container
-    version             show current version
-    help                show this information
+  Blockchain:
+    createblockchain -address ADDRESS - Create a blockchain and send genesis block reward to ADDRESS
+    createwallet - Generates a new key-pair and saves it into the wallet file
+    getbalance -address ADDRESS - Get balance of ADDRESS
+    listaddresses - Lists all addresses from the wallet file
+    printchain - Print all the blocks of the blockchain
+    reindexutxo - Rebuilds the UTXO set
+    send -from FROM -to TO -amount AMOUNT - Send AMOUNT of coins from FROM address to TO
+  Server:
+    serve - Starts the server
+
+  Functions:
+    fbuild - Build function to image and add to function list
+    frun - Run function by id
+    fstop - Stop function by id
+    flist - Get list of functions
+    fdelete - Remove function by id
+
+  General:
+    version - Shows the current software version
+    help - Show this usage information
 ```
 
 ## Installation
