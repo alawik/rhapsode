@@ -13,6 +13,8 @@ import (
 	"fmt"
 	"log"
 	"strings"
+
+	"github.com/alawik/rhapsode/util"
 )
 
 const subsidy = 10
@@ -36,7 +38,7 @@ type TXOutput struct {
 }
 
 func (out *TXOutput) Lock(address []byte) {
-	pubKeyHash := Base58Decode(address)
+	pubKeyHash := util.Base58Decode(address)
 	pubKeyHash = pubKeyHash[1 : len(pubKeyHash)-4]
 	out.PubKeyHash = pubKeyHash
 }

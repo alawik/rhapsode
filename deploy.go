@@ -3,6 +3,7 @@ package main
 import (
     "fmt"
     "os"
+    "github.com/alawik/rhapsode/util"
 )
 
 func Deploy() {
@@ -12,7 +13,7 @@ func Deploy() {
         os.Exit(1)
     } else if nArgs >= 3 {
         fxPath := os.Args[2]
-        fxPathExists, _ := DoesPathExist(fxPath)
+        fxPathExists, _ := util.DoesPathExist(fxPath)
         port := os.Args[3]
 
         if fxPathExists && port != "" {
