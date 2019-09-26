@@ -9,6 +9,7 @@ import (
 	"log"
 
 	"golang.org/x/crypto/ripemd160"
+	"github.com/alawik/rhapsode/util"
 )
 
 const walletVersion = byte(0x00)
@@ -34,7 +35,7 @@ func (w Wallet) GetAddress() []byte {
 	checksum := checksum(versionedPayload)
 
 	fullPayload := append(versionedPayload, checksum...)
-	address := Base58Encode(fullPayload)
+	address := util.Base58Encode(fullPayload)
 
 	return address
 }
@@ -53,7 +54,7 @@ func HashPubKey(pubKey []byte) []byte {
 }
 
 func ValidateAddress(address string) bool {
-	pubKeyHash := Base58Decode([]byte(address))
+	pubKeyHash := util.Base58Decode([]byte(address))
 	actualChecksum := pubKeyHash[len(pubKeyHash)-addressChecksumLen:]
 	version := pubKeyHash[0]
 	pubKeyHash = pubKeyHash[1 : len(pubKeyHash)-addressChecksumLen]

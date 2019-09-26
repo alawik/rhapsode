@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"github.com/alawik/rhapsode/util"
 )
 
 var maxNonce = math.MaxInt64
@@ -31,9 +32,9 @@ func (pow *ProofOfWork) prepareData(nonce int) []byte {
 		[][]byte{
 			pow.block.PrevBlockHash,
 			pow.block.HashTransactions(),
-			IntToHex(pow.block.Timestamp),
-			IntToHex(int64(targetBits)),
-			IntToHex(int64(nonce)),
+			util.IntToHex(pow.block.Timestamp),
+			util.IntToHex(int64(targetBits)),
+			util.IntToHex(int64(nonce)),
 		},
 		[]byte{},
 	)

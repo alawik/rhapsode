@@ -17,6 +17,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"github.com/alawik/rhapsode/util"
 )
 import "github.com/mholt/archiver"
 
@@ -215,7 +216,7 @@ func writeToLog(reader io.ReadCloser) error {
 	return nil
 }
 func DockerBuild(fxPath string) string {
-	fxPathExists, _ := DoesPathExist(fxPath)
+	fxPathExists, _ := util.DoesPathExist(fxPath)
 	if !fxPathExists {
 		fmt.Print("Function path does not exist.")
 		os.Exit(1)
